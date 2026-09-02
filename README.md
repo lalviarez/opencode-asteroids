@@ -32,11 +32,12 @@ Luego visita `http://localhost:3000`.
 
 ## Puntuación
 
-| Asteroide | Puntos |
-| --------- | ------ |
-| Grande    | 20     |
-| Mediano   | 50     |
-| Pequeño   | 100    |
+| Asteroide      | Puntos |
+| -------------- | ------ |
+| Grande         | 20     |
+| Mediano        | 50     |
+| Pequeño        | 100    |
+| Estrella fugaz | 200    |
 
 ## Características
 
