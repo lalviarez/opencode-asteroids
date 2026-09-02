@@ -31,7 +31,7 @@ const randInt = (min, max) => Math.floor(rand(min, max + 1));
 
 // ── Bullet ────────────────────────────────────────────────────────────────────
 class Bullet {
-  constructor(x, y, angle) {
+  constructor(x, y, angle, color = '#fff') {
     this.x = x;
     this.y = y;
     const SPEED = 520;
@@ -39,6 +39,7 @@ class Bullet {
     this.vy = Math.sin(angle) * SPEED;
     this.ttl  = 1.1;
     this.radius = 2;
+    this.color = color;
     this.dead = false;
   }
 
@@ -50,7 +51,7 @@ class Bullet {
   }
 
   draw() {
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -193,6 +194,8 @@ class ShootingStar {
 }
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
+const BURST_DELAY = 0.06;  // s entre balas de la ráfaga del triple disparo
+
 class Ship {
   constructor() { this.reset(); }
 
@@ -207,14 +210,29 @@ class Ship {
     this.invincible    = 3;
     this.shootCooldown = 0;
     this.speedBoost    = 0;
+    this.tripleShot    = 0;
+    this.burstQueue    = 0;  // balas pendientes de la ráfaga
+    this.burstTimer    = 0;  // cuenta atrás para la siguiente bala de la ráfaga
     this.dead          = false;
   }
 
   update(dt) {
-    if (this.dead) return;
+    const spawned = [];
+    if (this.dead) return spawned;
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedBoost    > 0) this.speedBoost    -= dt;
+    if (this.tripleShot    > 0) this.tripleShot    -= dt;
+
+    // Ráfaga del triple disparo: balas pendientes salen con delay entre sí
+    if (this.burstQueue > 0) {
+      this.burstTimer -= dt;
+      if (this.burstTimer <= 0) {
+        this.burstQueue--;
+        this.burstTimer = BURST_DELAY;
+        spawned.push(this.fireBullet());
+      }
+    }
 
     const ROT   = 3.5;   // rad/s
     const THRUST = 260;  // px/s²
@@ -235,15 +253,31 @@ class Ship {
     this.vy *= DRAG;
     this.x = wrap(this.x + this.vx * dt, W);
     this.y = wrap(this.y + this.vy * dt, H);
+
+    return spawned;
+  }
+
+  fireBullet() {
+    const NOSE = 21;
+    const color = this.tripleShot > 0 ? '#ff0' : '#fff';
+    return new Bullet(
+      this.x + Math.cos(this.angle) * NOSE,
+      this.y + Math.sin(this.angle) * NOSE,
+      this.angle,
+      color
+    );
   }
 
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
     this.shootCooldown = 0.2;
-    const NOSE = 21;
-    const ox = this.x + Math.cos(this.angle) * NOSE;
-    const oy = this.y + Math.sin(this.angle) * NOSE;
-    return [new Bullet(ox, oy, this.angle)];
+    const bullet = this.fireBullet();
+    // Triple disparo: la 1ª bala sale ya; las otras 2 se programan en ráfaga
+    if (this.tripleShot > 0) {
+      this.burstQueue = 2;
+      this.burstTimer = BURST_DELAY;
+    }
+    return [bullet];
   }
 
   draw() {
@@ -465,7 +499,7 @@ function update(dt) {
     if (shootingStars.length < 2) shootingStars.push(new ShootingStar());
   }
 
-  ship.update(dt);
+  bullets.push(...ship.update(dt));
   bullets.forEach(b => b.update(dt));
   asteroids.forEach(a => a.update(dt));
   shootingStars.forEach(s => s.update(dt));
@@ -496,13 +530,14 @@ function update(dt) {
   asteroids = asteroids.filter(a => !a.dead).concat(newAsteroids);
   bullets   = bullets.filter(b => !b.dead);
 
-  // Bala vs estrella fugaz: no se divide, otorga puntos bonus
+  // Bala vs estrella fugaz: no se divide, otorga puntos bonus y triple disparo
   for (const b of bullets) {
     for (const s of shootingStars) {
       if (!s.dead && !b.dead && dist(b, s) < s.radius) {
         b.dead = true;
         s.dead = true;
         score += STAR_POINTS;
+        ship.tripleShot = 5;  // recolectar otra estrella reinicia el timer
         explode(s.x, s.y, 12, '#7df');
       }
     }
@@ -564,6 +599,23 @@ function drawLifeIcon(x, y) {
   ctx.restore();
 }
 
+function drawPowerBar(y, label, remaining, color) {
+  const barW = 160;
+  const barH = 6;
+  const x = W / 2 - barW / 2;
+
+  ctx.textAlign = 'center';
+  ctx.font      = '11px monospace';
+  ctx.fillStyle = color;
+  ctx.fillText(label, W / 2, y - 6);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(x, y, barW, barH);
+
+  ctx.fillRect(x + 1, y + 1, (barW - 2) * (remaining / 5), barH - 2);
+}
+
 function drawHUD() {
   ctx.fillStyle = '#fff';
   ctx.font = '15px monospace';
@@ -577,23 +629,15 @@ function drawHUD() {
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
-  // Barra del power-up de velocidad activo
-  if (!ship.dead && ship.speedBoost > 0) {
-    const barW = 160;
-    const barH = 6;
-    const x = W / 2 - barW / 2;
-    const y = H - 24;
-
-    ctx.textAlign = 'center';
-    ctx.font      = '11px monospace';
-    ctx.fillStyle = '#0ff';
-    ctx.fillText(`VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, W / 2, y - 6);
-
-    ctx.strokeStyle = '#0ff';
-    ctx.lineWidth   = 1;
-    ctx.strokeRect(x, y, barW, barH);
-
-    ctx.fillRect(x + 1, y + 1, (barW - 2) * (ship.speedBoost / 5), barH - 2);
+  // Barras de power-ups activos, apiladas desde abajo
+  if (!ship.dead) {
+    let y = H - 24;
+    if (ship.tripleShot > 0) {
+      drawPowerBar(y, `TRIPLE ${ship.tripleShot.toFixed(1)}s`, ship.tripleShot, '#ff0');
+      y -= 18;
+    }
+    if (ship.speedBoost > 0)
+      drawPowerBar(y, `VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, ship.speedBoost, '#0ff');
   }
 }
 
