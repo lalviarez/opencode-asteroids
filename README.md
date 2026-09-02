@@ -29,6 +29,7 @@ Luego visita `http://localhost:3000`.
 | `←` `→`   | Rotar nave |
 | `↑`       | Propulsar  |
 | `Espacio` | Disparar   |
+| `S`       | Escudo     |
 
 ## Puntuación
 
@@ -42,5 +43,6 @@ Luego visita `http://localhost:3000`.
 ## Características
 
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
+- Escudo activable con `S`: 3 s de protección que destruye asteroides sin dar puntos, 8 s de recarga
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
