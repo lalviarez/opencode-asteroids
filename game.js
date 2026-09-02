@@ -29,6 +29,39 @@ const dist  = (a, b)   => Math.hypot(a.x - b.x, a.y - b.y);
 const rand  = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
 
+// ── Skins ─────────────────────────────────────────────────────────────────────
+// Cada skin define silueta (verts), color del trazo y color de la llama.
+// Las narices se mantienen entre 17 y 23 px para que el spawn de balas
+// (NOSE = 21 en Ship.tryShoot) siga coincidiendo visualmente.
+const SKINS = [
+  { name: 'CLÁSICA', color: '#fff', flame: 'rgba(255, 130, 0, 0.85)',
+    verts: [[20, 0], [-12, -9], [-7, 0], [-12, 9]] },
+  { name: 'DARDO', color: '#0ff', flame: 'rgba(255, 255, 255, 0.85)',
+    verts: [[22, 0], [-10, -6], [-5, 0], [-10, 6]] },
+  { name: 'CAZA', color: '#4f4', flame: 'rgba(120, 255, 120, 0.85)',
+    verts: [[20, 0], [-14, -10], [-6, -3], [-9, 0], [-6, 3], [-14, 10]] },
+  { name: 'CUÑA', color: '#f6f', flame: 'rgba(255, 100, 255, 0.85)',
+    verts: [[23, 0], [-13, -13], [-5, 0], [-13, 13]] },
+  { name: 'COHETE', color: '#fd5', flame: 'rgba(255, 220, 80, 0.9)',
+    verts: [[17, 0], [-7, -5], [-14, -12], [-8, -3], [-8, 3], [-14, 12], [-7, 5]] },
+];
+
+const SKIN_KEY = 'asteroids-skin';  // clave de localStorage
+
+function loadSkin() {
+  try {
+    const i = Number(localStorage.getItem(SKIN_KEY));
+    return Number.isInteger(i) && i >= 0 && i < SKINS.length ? i : 0;
+  } catch { return 0; }  // file:// puede bloquear localStorage
+}
+
+function saveSkin() {
+  try { localStorage.setItem(SKIN_KEY, String(skinIndex)); } catch {}
+}
+
+let skinIndex = loadSkin();
+let skinToast = 0;  // segundos restantes del aviso "SKIN: ..." en el HUD
+
 // ── Bullet ────────────────────────────────────────────────────────────────────
 class Bullet {
   constructor(x, y, angle, color = '#fff') {
@@ -259,7 +292,8 @@ class Ship {
 
   fireBullet() {
     const NOSE = 21;
-    const color = this.tripleShot > 0 ? '#ff0' : '#fff';
+    // Las balas acompañan el color del skin activo (amarillas con triple disparo)
+    const color = this.tripleShot > 0 ? '#ff0' : SKINS[skinIndex].color;
     return new Bullet(
       this.x + Math.cos(this.angle) * NOSE,
       this.y + Math.sin(this.angle) * NOSE,
@@ -285,19 +319,20 @@ class Ship {
     // Parpadeo durante invencibilidad de reaparición
     if (this.invincible > 0 && Math.floor(this.invincible * 8) % 2 === 0) return;
 
+    const skin = SKINS[skinIndex];
+
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = skin.color;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
-    // Silueta clásica: triángulo con muesca trasera
+    // Silueta según el skin activo
     ctx.beginPath();
-    ctx.moveTo( 20,  0);   // nariz
-    ctx.lineTo(-12, -9);   // ala izquierda
-    ctx.lineTo( -7,  0);   // muesca trasera
-    ctx.lineTo(-12,  9);   // ala derecha
+    ctx.moveTo(skin.verts[0][0], skin.verts[0][1]);
+    for (let i = 1; i < skin.verts.length; i++)
+      ctx.lineTo(skin.verts[i][0], skin.verts[i][1]);
     ctx.closePath();
     ctx.stroke();
 
@@ -309,7 +344,7 @@ class Ship {
       ctx.lineTo(-8,  4);
       ctx.strokeStyle = this.speedBoost > 0
         ? 'rgba(0, 255, 255, 0.9)'
-        : 'rgba(255, 130, 0, 0.85)';
+        : skin.flame;
       ctx.stroke();
     }
 
@@ -467,6 +502,14 @@ function killShip() {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
+  // Rotar skin con S (válido en cualquier estado; pressed se consume una vez por frame)
+  if (skinToast > 0) skinToast -= dt;
+  if (pressed('KeyS')) {
+    skinIndex = (skinIndex + 1) % SKINS.length;
+    saveSkin();
+    skinToast = 1.5;
+  }
+
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
     particles.forEach(p => p.update(dt));
@@ -583,17 +626,19 @@ function update(dt) {
 
 // ── Draw ──────────────────────────────────────────────────────────────────────
 function drawLifeIcon(x, y) {
+  const skin  = SKINS[skinIndex];
+  const SCALE = 0.45;  // miniatura del polígono del skin
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth   = 1.2;
+  ctx.scale(SCALE, SCALE);
+  ctx.strokeStyle = skin.color;
+  ctx.lineWidth   = 1.2 / SCALE;  // compensar la escala para mantener el grosor
   ctx.lineJoin    = 'round';
   ctx.beginPath();
-  ctx.moveTo( 9,  0);
-  ctx.lineTo(-6, -5);
-  ctx.lineTo(-3,  0);
-  ctx.lineTo(-6,  5);
+  ctx.moveTo(skin.verts[0][0], skin.verts[0][1]);
+  for (let i = 1; i < skin.verts.length; i++)
+    ctx.lineTo(skin.verts[i][0], skin.verts[i][1]);
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
@@ -628,6 +673,16 @@ function drawHUD() {
 
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
+
+  // Aviso temporal del skin activo tras rotar con S
+  if (skinToast > 0) {
+    ctx.textAlign   = 'center';
+    ctx.font        = '13px monospace';
+    ctx.fillStyle   = SKINS[skinIndex].color;
+    ctx.globalAlpha = Math.min(1, skinToast / 0.4);  // desvanecimiento final
+    ctx.fillText(`SKIN: ${SKINS[skinIndex].name}`, W / 2, 48);
+    ctx.globalAlpha = 1;
+  }
 
   // Barras de power-ups activos, apiladas desde abajo
   if (!ship.dead) {
