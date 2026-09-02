@@ -29,7 +29,8 @@ Luego visita `http://localhost:3000`.
 | `←` `→`   | Rotar nave |
 | `↑`       | Propulsar  |
 | `Espacio` | Disparar   |
-| `S`       | Cambiar skin de la nave |
+| `S`       | Escudo     |
+| `C`       | Cambiar skin de la nave |
 
 ## Puntuación
 
@@ -43,7 +44,8 @@ Luego visita `http://localhost:3000`.
 ## Características
 
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
+- Escudo activable con `S`: 3 s de protección que destruye asteroides sin dar puntos, 8 s de recarga
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Estrella fugaz: además de puntos bonus, otorga triple disparo (ráfaga de 3 balas) durante 5 s
-- 5 skins de nave con silueta y color propios (rotar con `S`); la elección se recuerda entre sesiones
+- 5 skins de nave con silueta y color propios (rotar con `C`); la elección se recuerda entre sesiones

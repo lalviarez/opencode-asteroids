@@ -227,7 +227,10 @@ class ShootingStar {
 }
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
-const BURST_DELAY = 0.06;  // s entre balas de la ráfaga del triple disparo
+const BURST_DELAY     = 0.06;  // s entre balas de la ráfaga del triple disparo
+const SHIELD_TIME     = 3;   // segundos de escudo activo
+const SHIELD_COOLDOWN = 8;   // segundos de recarga tras expirar
+const SHIELD_RADIUS   = 30;  // radio del círculo del escudo
 
 class Ship {
   constructor() { this.reset(); }
@@ -239,23 +242,27 @@ class Ship {
     this.vx     = 0;
     this.vy     = 0;
     this.radius = 12;
-    this.thrusting     = false;
-    this.invincible    = 3;
-    this.shootCooldown = 0;
-    this.speedBoost    = 0;
-    this.tripleShot    = 0;
-    this.burstQueue    = 0;  // balas pendientes de la ráfaga
-    this.burstTimer    = 0;  // cuenta atrás para la siguiente bala de la ráfaga
-    this.dead          = false;
+    this.thrusting      = false;
+    this.invincible     = 3;
+    this.shootCooldown  = 0;
+    this.speedBoost     = 0;
+    this.tripleShot     = 0;
+    this.burstQueue     = 0;  // balas pendientes de la ráfaga
+    this.burstTimer     = 0;  // cuenta atrás para la siguiente bala de la ráfaga
+    this.shieldTime     = 0;
+    this.shieldCooldown = 0;
+    this.dead           = false;
   }
 
   update(dt) {
     const spawned = [];
     if (this.dead) return spawned;
-    if (this.invincible    > 0) this.invincible    -= dt;
-    if (this.shootCooldown > 0) this.shootCooldown -= dt;
-    if (this.speedBoost    > 0) this.speedBoost    -= dt;
-    if (this.tripleShot    > 0) this.tripleShot    -= dt;
+    if (this.invincible     > 0) this.invincible     -= dt;
+    if (this.shootCooldown  > 0) this.shootCooldown  -= dt;
+    if (this.speedBoost     > 0) this.speedBoost     -= dt;
+    if (this.tripleShot     > 0) this.tripleShot     -= dt;
+    if (this.shieldTime     > 0) this.shieldTime     -= dt;
+    if (this.shieldCooldown > 0) this.shieldCooldown -= dt;
 
     // Ráfaga del triple disparo: balas pendientes salen con delay entre sí
     if (this.burstQueue > 0) {
@@ -314,6 +321,13 @@ class Ship {
     return [bullet];
   }
 
+  tryShield() {
+    // Solo si terminó la recarga; el ciclo completo es duración + recarga
+    if (this.shieldCooldown > 0 || this.dead) return;
+    this.shieldTime     = SHIELD_TIME;
+    this.shieldCooldown = SHIELD_TIME + SHIELD_COOLDOWN;
+  }
+
   draw() {
     if (this.dead) return;
     // Parpadeo durante invencibilidad de reaparición
@@ -349,6 +363,19 @@ class Ship {
     }
 
     ctx.restore();
+
+    // Escudo: anillo cian pulsante, parpadea cuando está por expirar
+    if (this.shieldTime > 0) {
+      const blink = this.shieldTime < 1 && Math.floor(this.shieldTime * 8) % 2 === 0;
+      if (!blink) {
+        const pulse = 1 + Math.sin(this.shieldTime * 6) * 0.06;
+        ctx.strokeStyle = '#0ff';
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, SHIELD_RADIUS * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
   }
 }
 
@@ -502,13 +529,16 @@ function killShip() {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
-  // Rotar skin con S (válido en cualquier estado; pressed se consume una vez por frame)
+  // Rotar skin con C (válido en cualquier estado; pressed se consume una vez por frame)
   if (skinToast > 0) skinToast -= dt;
-  if (pressed('KeyS')) {
+  if (pressed('KeyC')) {
     skinIndex = (skinIndex + 1) % SKINS.length;
     saveSkin();
     skinToast = 1.5;
   }
+
+  // Descarta pulsaciones de escudo pendientes mientras no se juega
+  if (state !== 'playing') justPressed['KeyS'] = false;
 
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
@@ -534,6 +564,9 @@ function update(dt) {
   if (pressed('Space')) {
     bullets.push(...ship.tryShoot());
   }
+
+  // Activar escudo (S)
+  if (pressed('KeyS')) ship.tryShield();
 
   // Aparición periódica de estrellas fugaces (máx. 2 en pantalla)
   starTimer -= dt;
@@ -588,21 +621,36 @@ function update(dt) {
   shootingStars = shootingStars.filter(s => !s.dead);
   bullets       = bullets.filter(b => !b.dead);
 
-  // Nave vs asteroide
-  if (ship.invincible <= 0) {
+  // Escudo vs asteroide: lo destruye y divide, sin dar puntos
+  const shielded = !ship.dead && ship.shieldTime > 0;
+  if (shielded) {
+    const fragments = [];
+    for (const a of asteroids) {
+      if (!a.dead && dist(ship, a) < SHIELD_RADIUS + a.radius) {
+        a.dead = true;
+        explode(a.x, a.y, a.size * 5, '#0ff');
+        fragments.push(...a.split());
+      }
+    }
+    asteroids = asteroids.filter(a => !a.dead).concat(fragments);
+  }
+
+  // Nave vs asteroide (letal salvo con el escudo activo)
+  if (!shielded && ship.invincible <= 0) {
     for (const a of asteroids) {
       if (dist(ship, a) < ship.radius + a.radius * 0.82) {
         killShip();
         break;
       }
     }
-    // Nave vs estrella fugaz (respeta la misma invencibilidad)
-    if (!ship.dead) {
-      for (const s of shootingStars) {
-        if (dist(ship, s) < ship.radius + s.radius * 0.82) {
-          killShip();
-          break;
-        }
+  }
+
+  // Nave vs estrella fugaz (el escudo no la bloquea; respeta la invencibilidad)
+  if (!ship.dead && ship.invincible <= 0) {
+    for (const s of shootingStars) {
+      if (dist(ship, s) < ship.radius + s.radius * 0.82) {
+        killShip();
+        break;
       }
     }
   }
@@ -644,7 +692,7 @@ function drawLifeIcon(x, y) {
   ctx.restore();
 }
 
-function drawPowerBar(y, label, remaining, color) {
+function drawPowerBar(y, label, remaining, max, color) {
   const barW = 160;
   const barH = 6;
   const x = W / 2 - barW / 2;
@@ -658,7 +706,7 @@ function drawPowerBar(y, label, remaining, color) {
   ctx.lineWidth   = 1;
   ctx.strokeRect(x, y, barW, barH);
 
-  ctx.fillRect(x + 1, y + 1, (barW - 2) * (remaining / 5), barH - 2);
+  ctx.fillRect(x + 1, y + 1, (barW - 2) * (remaining / max), barH - 2);
 }
 
 function drawHUD() {
@@ -674,7 +722,7 @@ function drawHUD() {
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
-  // Aviso temporal del skin activo tras rotar con S
+  // Aviso temporal del skin activo tras rotar con C
   if (skinToast > 0) {
     ctx.textAlign   = 'center';
     ctx.font        = '13px monospace';
@@ -684,15 +732,24 @@ function drawHUD() {
     ctx.globalAlpha = 1;
   }
 
-  // Barras de power-ups activos, apiladas desde abajo
+  // Barras de power-ups y escudo, apiladas desde abajo
   if (!ship.dead) {
     let y = H - 24;
     if (ship.tripleShot > 0) {
-      drawPowerBar(y, `TRIPLE ${ship.tripleShot.toFixed(1)}s`, ship.tripleShot, '#ff0');
+      drawPowerBar(y, `TRIPLE ${ship.tripleShot.toFixed(1)}s`, ship.tripleShot, 5, '#ff0');
       y -= 18;
     }
-    if (ship.speedBoost > 0)
-      drawPowerBar(y, `VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, ship.speedBoost, '#0ff');
+    if (ship.speedBoost > 0) {
+      drawPowerBar(y, `VELOCIDAD ${ship.speedBoost.toFixed(1)}s`, ship.speedBoost, 5, '#0ff');
+      y -= 18;
+    }
+    // Escudo: drena en cian mientras dura; en recarga se llena en cian tenue
+    if (ship.shieldTime > 0) {
+      drawPowerBar(y, `ESCUDO ${ship.shieldTime.toFixed(1)}s`, ship.shieldTime, SHIELD_TIME, '#0ff');
+    } else if (ship.shieldCooldown > 0) {
+      const cycle = SHIELD_TIME + SHIELD_COOLDOWN;
+      drawPowerBar(y, 'ESCUDO RECARGANDO', cycle - ship.shieldCooldown, cycle, 'rgba(0, 255, 255, 0.45)');
+    }
   }
 }
 
