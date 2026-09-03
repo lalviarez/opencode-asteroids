@@ -41,6 +41,8 @@ Luego visita `http://localhost:3000`.
 | Pequeño        | 100    |
 | Estrella fugaz | 200    |
 
+Con la skin **TITÁN** todos los puntos se duplican.
+
 ## Características
 
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
@@ -48,4 +50,5 @@ Luego visita `http://localhost:3000`.
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Estrella fugaz: además de puntos bonus, otorga triple disparo (ráfaga de 3 balas) durante 5 s
-- 5 skins de nave con silueta y color propios (rotar con `C`); la elección se recuerda entre sesiones
+- 6 skins de nave con silueta y color propios (rotar con `C`); la elección se recuerda entre sesiones
+- Skin **TITÁN**: nave morada al doble de tamaño que otorga el doble de puntos, a cambio de un radio de colisión mayor
