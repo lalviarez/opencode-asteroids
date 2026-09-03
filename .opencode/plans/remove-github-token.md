@@ -1,3 +1,13 @@
+# Plan: eliminar la dependencia de GITHUB_TOKEN (Propuesta 1 — app opencode-agent vía OIDC)
+
+Estado: aprobado por el usuario. Bloqueado por permisos de sesión (solo se permite escribir en `.opencode/plans/`).
+Al reactivar el modo de edición, aplicar este cambio.
+
+## Cambio
+
+Reemplazar **completamente** el contenido de `.github/workflows/opencode-issue-format.yml` por:
+
+```yaml
 name: Formateo de issues
 
 on:
@@ -126,3 +136,29 @@ jobs:
             2-4 líneas confirmando el formateo: etiquetas añadidas y secciones incluidas. Si
             algún comando gh falló tras reintentarlo una vez, repórtalo en tu respuesta sin
             inventar éxito.
+```
+
+Diferencias respecto a la versión actual (commit 01fdc06):
+1. `permissions`: `contents: read` + `issues: write` → `id-token: write` + `contents: read`.
+2. Nuevo pre-paso `Get opencode-agent app token` (id: `apptoken`): intercambio OIDC → token de instalación de la app `opencode-agent` vía `api.opencode.ai/exchange_github_app_token` (mismo mecanismo que el workflow `/oc` existente), con `::add-mask::` y guardas de error.
+3. Paso `Run opencode`: `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` → `GITHUB_TOKEN: ${{ steps.apptoken.outputs.token }}` (el action exige ese nombre de env en modo `use_github_token`; el valor es el token de la app, identidad `opencode-agent[bot]`).
+4. Prompt: SIN cambios.
+
+## Validación tras aplicar
+
+1. `/tmp/opencode/actionlint .github/workflows/opencode-issue-format.yml` → OK.
+2. Parseo estructural con PyYAML (actualizar `/tmp/opencode/validate_workflow.py`: 3 steps, permisos `id-token`/`contents`, env `steps.apptoken.outputs.token`, assertions del prompt intactas).
+3. Sin commit — queda en working tree hasta que el usuario lo pida explícitamente.
+
+## Verificación end-to-end (tras push, cuando el usuario lo autorice)
+
+1. Crear issue de prueba desordenado.
+2. Run verde: pre-paso obtiene token (enmascarado en logs — confirmar que no aparece el token en claro), reacción 👀, edición de cuerpo + labels por `opencode-agent[bot]`, comentario de confirmación.
+3. Repetir con un issue tipo mejora (`enhancement`).
+
+## Caveats
+
+- El autor del issue debe tener permiso de escritura (`assertPermissions` del action).
+- Disponibilidad de `api.opencode.ai` (idéntica a la del workflow `/oc` actual).
+- Token de la app expira solo (~1 h); en modo `use_github_token` el action no lo revoca — irrelevante sin pushes.
+- `actions/checkout` sigue usando el token efímero del job para el clon de solo lectura (igual que `/oc`); la dependencia funcional de `secrets.GITHUB_TOKEN` queda eliminada.
