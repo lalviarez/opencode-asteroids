@@ -9,6 +9,10 @@ Single-file HTML5 Canvas Asteroids clone: no frameworks, no bundler, no dependen
 - Run: open `index.html` directly in a browser, or `npx serve .` → http://localhost:3000.
 - No tests, linter, typecheck, or CI exist. All verification is manual, in the browser.
 
+## Git
+
+- Never commit or push unless the user explicitly asks for it. To recommend a commit, ask first and wait for confirmation.
+
 ## Gotchas
 
 - Canvas size 800×600 is duplicated: the `<canvas width/height>` attributes in `index.html` and the `W`/`H` constants in `game.js` must be kept in sync, or rendering and edge-wrapping break.
